@@ -58,7 +58,6 @@ def search_query(API_KEY):
         f'query=biden&'
         f'maxAgeDays=30&'
         f'offset=0&languageCode=en-US&key={API_KEY}')
-    print(url)
     r = requests.get(
        url,
         headers={
