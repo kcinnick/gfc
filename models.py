@@ -13,11 +13,20 @@ class Claim(Base):
     claimant_id = Column(Integer, ForeignKey("claimants.id"))
     claimant = relationship("Claimant")
 
+    def __str__(self):
+        return f"{self.text}"
+
+    def __repr__(self):
+        return f"{self.text}"
+
 
 class Claimant(Base):
     __tablename__ = "claimants"
     id = Column(Integer, primary_key=True)
     name = Column(Text, unique=True)
+
+    def __str__(self):
+        return f"{self.name}"
 
 
 claims = Table(
