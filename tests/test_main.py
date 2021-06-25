@@ -1,7 +1,7 @@
 import datetime
 import os
 
-from main import get_api_key, search_query, process_claim
+from main import get_api_key, search_query, process_claim, create_db_session
 
 
 def test_get_api_key():
@@ -31,7 +31,8 @@ def test_process_claims():
              'languageCode': 'en'}
         ]
     }
-    processed_claim = process_claim(example_claim)
+    session = create_db_session()
+    processed_claim = process_claim(example_claim, session)
     assert processed_claim.text == 'An image shows President Joe Biden sleeping at G-7 summit'
     assert processed_claim.date == datetime.date(2021, 6, 16)
     assert processed_claim.claimant.name == 'Social media users'

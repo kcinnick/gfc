@@ -10,14 +10,18 @@ from sqlalchemy.pool import NullPool
 
 from models import Claim, Claimant, claims, claimants
 
-engine = create_engine(
-    f"postgresql+psycopg2://postgres:"
-    + f"{os.getenv('POSTGRES_PASSWORD')}@127.0.0.1"
-    + f":5432/gfc",
-    poolclass=NullPool,
-)
-Session = sessionmaker(bind=engine)
-session = Session()
+
+def create_db_session():
+    engine = create_engine(
+        f"postgresql+psycopg2://postgres:"
+        + f"{os.getenv('POSTGRES_PASSWORD')}@127.0.0.1"
+        + f":5432/gfc",
+        poolclass=NullPool,
+    )
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    return session
 
 
 def get_api_key():
@@ -30,7 +34,7 @@ def get_api_key():
     return API_KEY
 
 
-def process_claim(claim):
+def process_claim(claim, session):
     claimant = Claimant(name=claim["claimant"])
     session.add(claimant)
     try:
@@ -59,7 +63,7 @@ def search_query(API_KEY):
     url = (
         f"https://content-factchecktools.googleapis.com/v1alpha1/claims:search?"
         f"pageSize=10&"
-        f"query=qanon&"
+        f"query=biden&"
         f"maxAgeDays=30&"
         f"offset=0&languageCode=en-US&key={API_KEY}"
     )
@@ -73,11 +77,12 @@ def search_query(API_KEY):
 def main():
     API_KEY = get_api_key()
     claims = search_query(API_KEY=API_KEY)
+    session = create_db_session()
     for claim in claims:
-        process_claim(claim)
+        process_claim(claim, session)
 
 
-def source_of_claims():
+def source_of_claims(session):
     results = session.query(
         claims._columns['claimant_id'],  # id of claimant
         func.count(claims._columns['claimant_id'])  # number of claims claimant is responsible for
@@ -100,5 +105,5 @@ def source_of_claims():
 
 
 if __name__ == "__main__":
-    main()
-    source_of_claims()
+    session = create_db_session()
+    source_of_claims(session=session)
