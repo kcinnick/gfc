@@ -1,6 +1,7 @@
 import datetime
 import os
 from collections import defaultdict
+from time import sleep
 
 import requests
 from sqlalchemy import create_engine, func
@@ -35,7 +36,13 @@ def get_api_key():
 
 
 def process_claim(claim, session):
-    claimant = Claimant(name=claim["claimant"])
+    name = claim.get('claimant', 'Social media users').title()
+    if 'social media' in name.lower():
+        name = 'Social media users'
+    try:
+        claimant = Claimant(name=name)
+    except KeyError:
+        claimant = Claimant(name=name)
     session.add(claimant)
     try:
         session.commit()
@@ -44,9 +51,14 @@ def process_claim(claim, session):
         session.rollback()
         claimant = session.query(Claimant).where(Claimant.name == claimant.name).first()
 
+    try:
+        claim_date = datetime.datetime.strptime(claim["claimDate"][:-10], '%Y-%m-%d').date()
+    except KeyError:
+        claim_date = datetime.datetime.strptime(claim['claimReview'][0]["reviewDate"][:-10], '%Y-%m-%d').date()
+
     claim = Claim(
         text=claim["text"],
-        date=datetime.datetime.strptime(claim["claimDate"][:-10], '%Y-%m-%d').date(),
+        date=claim_date,
         claimant=claimant
     )
     session.add(claim)
@@ -56,22 +68,44 @@ def process_claim(claim, session):
         print(f'Claim "{claim.text}" is already in the database.')
         session.rollback()
 
+    # TODO: parse claim reviews
+
     return claim
 
 
 def search_query(API_KEY):
-    url = (
-        f"https://content-factchecktools.googleapis.com/v1alpha1/claims:search?"
-        f"pageSize=10&"
-        f"query=biden&"
-        f"maxAgeDays=30&"
-        f"offset=0&languageCode=en-US&key={API_KEY}"
-    )
-    r = requests.get(url, headers={"x-referer": "https://explorer.apis.google.com"})
-    data = r.json()
-    next_page_token = data.get("nextPageToken")
-    claims = data.pop("claims")
-    return claims
+    offset = 0
+    total_claims = []
+    try:
+        while True:
+            url = (
+                f"https://content-factchecktools.googleapis.com/v1alpha1/claims:search?"
+                f"pageSize=10&"
+                f"query=biden&"
+                f"maxAgeDays=365&"
+                f"offset={offset}&languageCode=en-US&key={API_KEY}"
+            )
+            print('Requesting URL ', url)
+            r = requests.get(url, headers={"x-referer": "https://explorer.apis.google.com"})
+            data = r.json()
+
+            next_page_token = data.get("nextPageToken")
+            print(next_page_token)
+            try:
+                claims = data.pop("claims")
+                total_claims.extend(claims)
+            except KeyError:
+                print(data)
+                if data['error']['status'] == 'PERMISSION_DENIED':
+                    sleep(30)
+                    continue
+            offset += 10
+            print(len(total_claims))
+            sleep(5)
+    except Exception as e:
+        print(e)
+
+    return total_claims
 
 
 def main():
@@ -95,6 +129,7 @@ def source_of_claims(session):
         claimant = session.query(Claimant).get(ident=result[0])
         claims_ = session.query(Claim).where(Claim.claimant_id == claimant.id).all()
         parsed_results[claimant] = dict(claims=claims_, number_of_claims=len(claims_))
+
     for key, value in parsed_results.items():
         print('~~~')
         print(key)
@@ -105,5 +140,6 @@ def source_of_claims(session):
 
 
 if __name__ == "__main__":
+    main()
     session = create_db_session()
     source_of_claims(session=session)
